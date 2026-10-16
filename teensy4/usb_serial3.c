@@ -402,12 +402,14 @@ int usb_serial3_write(const void *buffer, uint32_t size)
 int usb_serial3_write_buffer_free(void)
 {
 	uint32_t sum = 0;
+	uint8_t prev_noautoflush = tx_noautoflush;
 	tx_noautoflush = 1;
 	for (uint32_t i=0; i < TX_NUM; i++) {
 		if (i == tx_head) continue;
 		if (!(usb_transfer_status(tx_transfer + i) & 0x80)) sum += TX_SIZE;
 	}
-	tx_noautoflush = 0;
+	asm("dsb" ::: "memory");
+	tx_noautoflush = prev_noautoflush;
 	return sum;
 }
 
@@ -416,6 +418,7 @@ void usb_serial3_flush_output(void)
 
 	if (!usb_configuration) return;
 	if (tx_available == 0) return;
+	uint8_t prev_noautoflush = tx_noautoflush;
 	tx_noautoflush = 1;
 	transfer_t *xfer = tx_transfer + tx_head;
 	uint8_t *txbuf = txbuffer + (tx_head * TX_SIZE);
@@ -425,7 +428,8 @@ void usb_serial3_flush_output(void)
 	usb_transmit(CDC3_TX_ENDPOINT, xfer);
 	if (++tx_head >= TX_NUM) tx_head = 0;
 	tx_available = 0;
-	tx_noautoflush = 0;
+	asm("dsb" ::: "memory");
+	tx_noautoflush = prev_noautoflush;
 }
 
 static void usb_serial3_flush_callback(void)
